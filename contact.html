@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>제품 문의 · 캠핑이너스</title>
+<style>
+  :root{--navy:#22375a;--orange:#e8762c;--bg:#f7f8fa;--line:#dfe3ea;--ink:#1b2430;--dim:#727d8c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Malgun Gothic","맑은 고딕",system-ui,sans-serif;font-size:16px;line-height:1.65}
+  .wrap{max-width:560px;margin:0 auto;padding:28px 18px 60px}
+  .brand{font-weight:800;color:var(--navy);font-size:18px;letter-spacing:-.02em}
+  .brand a{color:inherit;text-decoration:none}
+  h1{margin:14px 0 4px;font-size:26px;letter-spacing:-.02em}
+  .sub{margin:0 0 20px;color:var(--dim);font-size:14.5px}
+  form{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 18px}
+  label{display:block;font-weight:700;font-size:14px;margin:14px 0 6px}
+  label:first-of-type{margin-top:0}
+  label .opt{font-weight:400;color:var(--dim)}
+  input[type=text],input[type=tel],select,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  textarea{min-height:92px;resize:vertical}
+  .consent{display:flex;gap:10px;align-items:flex-start;margin-top:18px;font-size:13.5px;color:var(--ink);background:#f7f8fa;border-radius:10px;padding:12px}
+  .consent input{margin-top:4px;width:18px;height:18px;flex:0 0 auto}
+  .btn{width:100%;margin-top:18px;background:var(--orange);color:#fff;border:0;border-radius:12px;padding:14px;font:inherit;font-size:16px;font-weight:800;cursor:pointer}
+  .btn[disabled]{opacity:.55;cursor:wait}
+  .msg{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:14.5px;display:none}
+  .msg.ok{display:block;background:#eafaf1;color:#1f7a4d}
+  .msg.err{display:block;background:#fdeceb;color:#b42318}
+  .tag{margin-top:10px;font-size:12px;color:var(--dim)}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><a href="index.html">캠핑이너스</a></div>
+  <h1>제품 문의</h1>
+  <p class="sub">궁금하신 점을 남겨 주시면 확인 후 연락드리겠습니다.</p>
+
+  <form id="f" novalidate>
+    <label for="name">이름</label>
+    <input type="text" id="name" maxlength="40" autocomplete="name" required>
+
+    <label for="phone">연락처</label>
+    <input type="tel" id="phone" inputmode="tel" autocomplete="tel" placeholder="숫자만 (예: 01012345678)" required>
+    <div class="hint">하이픈(-)이 있어도 됩니다. 숫자 9~11자리.</div>
+
+    <label for="product">관심 제품 <span class="opt">(선택)</span></label>
+    <select id="product">
+      <option value="">선택 안 함</option>
+      <option>리본 시리즈</option>
+      <option>인사이트 시리즈</option>
+      <option>알바트로스 시리즈</option>
+      <option>소울메이트 시리즈</option>
+      <option>농막</option>
+      <option>기타</option>
+    </select>
+
+    <div id="srcBox">
+      <label for="source">어디서 알고 오셨나요</label>
+      <select id="source" required>
+        <option value="">선택해 주세요</option>
+        <option value="search">검색</option>
+        <option value="map">지도</option>
+        <option value="referral">지인 소개</option>
+        <option value="sns">SNS</option>
+        <option value="phone">전화</option>
+        <option value="other">기타</option>
+        <option value="unknown">모르겠음</option>
+      </select>
+    </div>
+
+    <label for="message">문의 내용 <span class="opt">(선택)</span></label>
+    <textarea id="message" maxlength="1000"></textarea>
+
+    <label class="consent" for="consent">
+      <input type="checkbox" id="consent">
+      <span>개인정보 수집·이용에 동의합니다. 문의 응대를 위해 이름·연락처·문의 내용을 수집하며 [보관 기간 확인필요]까지 보관합니다.</span>
+    </label>
+
+    <button class="btn" id="send" type="submit">문의 보내기</button>
+    <div class="msg" id="msg" role="status"></div>
+    <div class="tag" id="tag" style="display:none"></div>
+  </form>
+</div>
+
+<script>
+/* 공개용 키(publishable)만 쓴다. service_role / secret 키는 절대 이 파일에 넣지 않는다. */
+const SUPABASE_URL = 'https://cmczqwqugcitailyktjx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_UZjHoVgW_qMdDqYBoqXm0A_YoNQr5oF';
+
+const SOURCES = {search:'검색', map:'지도', referral:'지인 소개', sns:'SNS', phone:'전화', other:'기타'};
+const $ = id => document.getElementById(id);
+
+/* 링크 꼬리표 ?from=sns 가 있으면 「어디서 알고 오셨나요」를 대신 채운다 */
+const from = new URLSearchParams(location.search).get('from');
+let tagged = null;
+if (from && Object.prototype.hasOwnProperty.call(SOURCES, from)) {
+  tagged = from;
+  $('srcBox').style.display = 'none';
+  $('tag').style.display = 'block';
+  $('tag').textContent = '링크 꼬리표로 입력됨: ' + SOURCES[from];
+}
+
+function show(kind, text){ const m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('name').value.trim();
+  const phone = $('phone').value.replace(/\D/g, '');
+  const source = tagged || $('source').value;
+  if (!name || name.length > 40) return show('err', '이름을 1~40자로 적어 주세요.');
+  if (phone.length < 9 || phone.length > 11) return show('err', '연락처는 숫자 9~11자리로 적어 주세요.');
+  if (!source) return show('err', '「어디서 알고 오셨나요」를 골라 주세요.');
+  if (!$('consent').checked) return show('err', '개인정보 수집·이용에 동의해 주셔야 보낼 수 있습니다.');
+
+  const body = {
+    name, phone, source, consent: true,
+    product: $('product').value || null,
+    message: $('message').value.trim() || null
+  };
+  $('send').disabled = true;
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/inquiries', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (res.status === 201) {
+      show('ok', '접수했습니다. 확인 후 연락드리겠습니다.');
+      $('f').reset();
+      if (tagged) { $('srcBox').style.display = 'none'; }
+    } else {
+      let why = '';
+      try { why = (await res.json()).message || ''; } catch (_) {}
+      show('err', '접수하지 못했습니다. (상태 ' + res.status + (why ? ' · ' + why : '') + ')');
+    }
+  } catch (err) {
+    show('err', '접수하지 못했습니다. 인터넷 연결을 확인해 주세요. (' + err.message + ')');
+  } finally {
+    $('send').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
